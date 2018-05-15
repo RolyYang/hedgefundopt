@@ -1,0 +1,62 @@
+setwd("E:/Project(CSFB)")
+library(PerformanceAnalytics)
+library(quadprog)
+library(zoo)
+library(timeSeries)
+library(readxl)
+##generate hedge fund index return matrix
+Return <- read_excel("NAVROR.xlsx", sheet = "Return")
+Dates<-as.character(Return$Date)
+Dates2<-Dates[-c(1:24)]
+Tickers<-colnames(Return)[-1]
+Return<-Return[,-1]
+testret<-as.matrix(Return)
+rownames(Return)<-Dates
+
+##data analyse function 1
+statchar<-function(x,Date=Dates){
+  annret<-mean(x)*12
+  annvol<-sd(x)*sqrt(12)
+  ske<-skewness(x)
+  kur<-kurtosis(x)
+  sp<-SharpeRatio.annualized(x)
+  maxdra<-sortDrawdowns(findDrawdowns(x))$return[1]
+  startDD<-Date[sortDrawdowns(findDrawdowns(x))$from[1]]
+  endDD<-Date[sortDrawdowns(findDrawdowns(x))$to[1]]
+  result<- data.frame(annret,annvol,ske,kur,sp,maxdra,startDD,endDD)
+  return(result)
+}
+
+#analyse on the performance of each index
+test1<-as.matrix(testret[,1])
+rownames(test1)<-Dates
+perfmaxtix<-statchar(test1)
+
+for(i in 2:11){
+  test1<-as.matrix(testret[,i])
+  rownames(test1)<-Dates
+  perfmaxtix<-rbind(perfmaxtix,statchar(test1))
+}
+rownames(perfmaxtix)<-Tickers
+write.csv(test,"Performance of Index.csv")
+index.char<-statchar(testret[,1])
+
+#Benchark for comparing is set as the historical one month LIBOT rate
+LIBOR <- as.matrix(read_excel("LIBOR_1mon.xls"))
+LIBOR<-as.matrix(LIBOR[,2])
+BnchM<-matrix(as.numeric(LIBOR),nrow=144)
+row.names(BnchM)<-Dates
+
+
+##additional analysis on stategy performance
+statchar2<-function(x,y=BnchM){
+  SR<-SharpeRatio.annualized(x,scale = 12)
+  TE<-TrackingError(x,y,scale=12)
+  IR<-InformationRatio(x,y,scale = 12)
+  Alpha<-CAPM.jensenAlpha(x,y)
+  Betaa<-FamaBeta(x,y)
+  res<-data.frame(SR,TE,IR,Alpha,Betaa)
+  return(res)
+}
+
+RetMat<-testret[,-1]
