@@ -1,0 +1,212 @@
+####Mean-Variance Method
+##short allowed
+#sum=1
+w_mv<-matrix(0,nrow=120,ncol=10)
+opt<-portfolio.optim(RetMat[1:24,],shorts=TRUE)
+
+#weight matrix
+w_mv[1,]<-opt$pw
+for (i in 1:120){
+  n_in<-24+i
+  opt<-portfolio.optim(RetMat[1:n_in,],shorts = TRUE)
+  w_mv[i,]<-opt$pw
+}
+
+#return matrix
+strtret<-matrix(0,nrow=120,ncol=1)
+for(i in 1:120){
+  strtret[i,]<-sum(w_mv[i,]*RetMat[24+i,])
+}
+
+strtchar<-statchar(strtzoo,Date = Dates2)
+
+test1<-strtret[,1,drop=FALSE]
+test2<-BnchM[,1,drop=FALSE]
+statchar2(test1,test2)
+
+#efficient frontier
+effFrontier=function(avgret,rcov,nports=20,shorts=FALSE,wmax=1){
+  mxret=max(abs(avgret))
+  mnret=-mxret
+  n.assets=ncol(avgret)
+  reshigh=rep(wmax,n.assets)
+  if(shorts){
+    reslow=rep(-wmax,n.assets)
+  }else{
+    reslow=rep(0,n.assets)
+  }
+  min.rets=seq(mnret,mxret,len=nports)
+  vol=rep(NA,nports)
+  ret=rep(NA,nports)
+  for (k in 1:nports){
+    port.sol=NULL
+    try(port.sol<-portfolio.optim(x=avgret,pm=min.rets[k],covmat=rcov,resigh=reisgh
+                                  ,reslow = reslow,shorts=shorts))
+    if(!is.null(port.sol)){
+      vol[k]=sqrt(as.vector(port.sol$pw%*%rcov%*% port.sol$pw))
+      ret[k]=averet %*% port.sol$pw
+    }
+  }
+  return (list(vol=vol,ret=ret))
+}
+
+
+#####minimum variance method
+##short allowed
+library(quadprog)
+library(NMOF)
+
+##weight matrix
+w_mv<-matrix(0,nrow=120,ncol=10)
+for(i in 1:120){
+  n_in<-24+i
+  cov<-var(RetMat[1:n_in,])
+  weight<-minvar(cov,wmin=-Inf,wmax = Inf)[1:10]
+  w_mv[i,]<-weight
+}
+
+##return matrix
+strtret<-matrix(0,nrow=120,ncol=1)
+for(i in 1:120){
+  strtret[i,]<-sum(w_mv[i,]*RetMat[24+i,])  
+}
+
+rownames(strtret)<-Dates2
+strtzoo<-as.zoo(strtret)
+strtchar<-statchar(strtzoo,Date = Dates2)
+strtchar2<-statchar2(strtret)
+
+
+#####Risk Parity porfolio
+##Most diversified
+
+w_mv<-matrix(0,nrow = 1,ncol = 10)
+
+strtret<-matrix(0,nrow = 120,ncol = 1)
+for ( i in 1:120){
+    vol1<-sd(Retmat[23+i,])
+    vol2<-sd(Retmat[24+i,])
+    voldiff<-vol2-vol1
+    singlerisk<-apply(Retmat[24+i],2,sd)-apply(Retmat[23+i],2,sd)
+    contri<-voldiff/singlerisk
+    contriratio<-1/contri
+    weight<-contriratio/sum(contriratio)
+    w_mav[i,]<-weight
+    strtret[i,]<-sum(w_mv[1,]*RetMat[24+i,])
+}
+
+rownames(strtret)<-Dates2
+strtzoo<-as.zoo(strtret)
+strtchar<-statchar(strtzoo,Date = Dates2)
+strtchar2<-statchar2(strtret)
+
+##Maximizing Portfolio Sharpe Ratio 
+library(quadprog)
+library(SharpeR)
+w_mv<-matrix(0,nrow=120,ncol=10)
+mean2=function(x){
+  mean(x,na.rm = TRUE)
+}
+
+for (i in 1:120){
+  n=10
+  x=RetMat[1:24+i,]
+  covar=cov(x,use="complete.obs",method="pearson")
+  returns=apply(x,2,mean2)
+  A=rbind(returns,rep(1,n),diag(n))
+  b0=matrix(c(1,rep(0,n+1)),ncol=1)
+  d=matrix(rep(0,n),ncol = 1)
+  qp=solve.QP(Dmat=covar,dvec = d,Amat=t(A),bvec = b0,meq=1)$solution
+  weights=round(qp/sum(qp),7)
+  
+  
+  w_mv[i,]<-weights
+}
+
+##return matrix
+strtret<-matrix(0,nrow=120,ncol=1)
+for(i in 1:120){
+  strtret[i,]<-sum(w_mv[i,]*RetMat[24+i,])  
+}
+
+rownames(strtret)<-Dates2
+strtzoo<-as.zoo(strtret)
+strtchar<-statchar(strtzoo,Date = Dates2)
+strtchar2<-statchar2(strtret)
+
+
+mean2=function(x){
+  mean(x,na.rm = TRUE)
+}
+
+library(parma)
+library(PerformanceAnalytics)
+#parmautility-methods Utility Based Optimization
+#Utility based portfolio optimization using either Taylor 
+#series expansion of utility function with
+#moments or scenario based.
+
+w_mv<-matrix(0,nrow=120,ncol=10)
+for (i in 1:120){
+  n=10
+  sce<-RetMat[1:24+i,]
+  m1<-as.vector(apply(sce,2,mean)) #expected return
+  m2<-cov(sce)      #covariance
+  m3<-CoSkewnessMatrix(sce)
+  m4<-CoKurtosisMatrix(sce)
+  
+  opt<-parmautility("CARA","moment",scenario = sce,M1=m1,M2=m2,M3=m3,M4=m4,LB=rep(-1,length(m1)),UB=rep(1,length(m1)))
+  weight<-opt@solution[["weights"]]
+  w_mv[i,]<-weight
+}
+
+strtret<-matrix(0,nrow=120,ncol=1)
+for(i in 1:120){
+  strtret[i,]<-sum(w_mv[i,]*RetMat[24+i,])  
+}
+
+rownames(strtret)<-Dates2
+strtzoo<-as.zoo(strtret)
+strtchar<-statchar(strtzoo,Date = Dates2)
+strtchar2<-statchar2(strtret)
+
+######CARA utility function considering higher moments
+library(parma)
+#parmautility-methods Utility Based Optimization
+#Utility based portfolio optimization using either Taylor 
+#series expansion of utility function with
+#moments or scenario based.
+
+#parmautility(U = c("CARA", "Power"), method = c("moment", "scenario"),
+#             scenario = NULL, M1 = NULL, M2 = NULL, M3 = NULL, M4 = NULL, RA = 1,
+#             budget = 1, LB = rep(0, length(M1)), UB = rep(1, length(M1)))
+
+#m1<-as.vector(apply())
+#m2<-cov(RetMat[1:24,])
+#test<-parmautility("CARA","moment",scenario = RetMat[1:24,],M1=m1,M2=
+#                     m2,LB = rep(-1, length(m1)), UB = rep(1, length(m1)))
+
+w_mv<-matrix(0,nrow=120,ncol=10)
+for (i in 1:120){
+  n=10
+  m1<-as.vector(apply(RetMat[1:24+i,],2,mean))
+  m2<-cov(RetMat[1:24+i,])
+  sce<-RetMat[1:24+i,]
+  opt<-parmautility("CARA","moment",scenario = sce,M1=m1,M2=m2,LB=rep(-1,length(m1)),UB=rep(1,length(m1)))
+  weight<-opt@solution[["weights"]]
+  w_mv[i,]<-weight
+}
+
+strtret<-matrix(0,nrow=120,ncol=1)
+for(i in 1:120){
+  strtret[i,]<-sum(w_mv[i,]*RetMat[24+i,])  
+}
+
+rownames(strtret)<-Dates2
+strtzoo<-as.zoo(strtret)
+strtchar<-statchar(strtzoo,Date = Dates2)
+strtchar2<-statchar2(strtret)
+
+
+
+
